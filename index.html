@@ -365,7 +365,11 @@ function showSyncStatus(msg){
 async function syncAllToSheets(){
   const url=getGsUrl();
   if(!url){alert('Google Sheets URL not configured.\n\nPlease paste your /exec URL in the teal banner at the top of the dashboard.');return;}
-  const toSync=Object.keys(ST).filter(id=>{const s=ST[id];return s.sent||s.nac||s.clg||s.notes||s.bd;});
+  // Smart sync: if DIRTY set has items, only sync those; otherwise sync all with data
+  const dirtyIds = [...DIRTY];
+  const toSync = dirtyIds.length > 0
+    ? dirtyIds.filter(id => ST[id] && (ST[id].sent||ST[id].nac||ST[id].clg||ST[id].notes||ST[id].bd))
+    : Object.keys(ST).filter(id=>{const s=ST[id];return s.sent||s.nac||s.clg||s.notes||s.bd;});
   if(!toSync.length){alert('Nothing to sync — no sent or updated records found.');return;}
   const btn=document.getElementById('sync-all-btn');
   if(btn){btn.textContent='Syncing '+toSync.length+'...';btn.disabled=true;}
@@ -377,6 +381,7 @@ async function syncAllToSheets(){
     await new Promise(r=>setTimeout(r,150)); // small delay to avoid rate limiting
   }
   if(btn){btn.textContent='✓ Sync All';btn.disabled=false;}
+  DIRTY.clear(); // clear dirty tracking after successful sync
   alert('Done! Synced '+done+' records to Google Sheets.');
 }
 
@@ -575,9 +580,11 @@ async function loadSharedState(){
     const resp=await fetch(url+'?action=getAll&tab='+(typeof SHEET_TAB!=='undefined'?encodeURIComponent(SHEET_TAB):'Broadcast%20Log%20v2'),{method:'GET'});
     if(!resp.ok)return;
     const rows=await resp.json();
-    // Merge sheet data into ST — sheet is authoritative for sent/nac/bd/assignee
+    // Merge sheet data into ST
+    // Sheet is authoritative UNLESS the record is in DIRTY (has unsaved local changes)
     rows.forEach(row=>{
       if(!row.crmId)return;
+      if(DIRTY.has(row.crmId))return; // skip - local unsaved changes take priority
       if(!ST[row.crmId])ST[row.crmId]={};
       if(row.sent==='YES')ST[row.crmId].sent=true;
       if(row.noAccess==='YES')ST[row.crmId].nac=true;
@@ -594,8 +601,11 @@ async function loadSharedState(){
 
 // Pre-populate assignees via round-robin (only sets if not already assigned)
 
+let DIRTY = new Set();
+
 function sv(id,k,v){
   if(!ST[id])ST[id]={};ST[id][k]=v;
+  DIRTY.add(id);
   try{localStorage.setItem('mst_bc4_v2',JSON.stringify(ST));}catch(e){}
   const n=document.getElementById('sn');n.classList.add('show');
   clearTimeout(n._t);n._t=setTimeout(()=>n.classList.remove('show'),2000);
@@ -934,6 +944,47 @@ document.getElementById('lu2').textContent=now;
 render(); // initial empty render while loading
 loadCustomersFromAirtable(); // fetches customers, assigns team, loads sheet state, re-renders
 loadTripsFromAirtable();     // fetches trip details in parallel
+
+// Auto-refresh shared state every 3 minutes so everyone sees each other's work
+setInterval(async () => {
+  if(DIRTY.size > 0) {
+    // There are unsynced local changes — sync them first
+    await syncAllToSheets();
+  }
+  await loadSharedState();
+  render();
+  us();
+  const el = document.getElementById('last-refresh');
+  if(el) el.textContent = '· Last synced: '+new Date().toLocaleTimeString('en-GB',{timeZone:'Asia/Bangkok'});
+  console.log('Auto-refreshed shared state at', new Date().toLocaleTimeString());
+}, 3 * 60 * 1000); // every 3 minutes
+
+// Auto-sync on page close — so no work is lost when tab is closed
+window.addEventListener('beforeunload', (e) => {
+  if(DIRTY.size > 0) {
+    // Use sendBeacon for reliable sync on page close
+    const url = getGsUrl();
+    if(!url) return;
+    // Sync all dirty records
+    [...DIRTY].forEach(id => {
+      const st = ST[id]||{};
+      const c = D.find(x=>x.id===id)||{};
+      if(!c.id) return;
+      const params = new URLSearchParams({
+        action:'sync', tab:SHEET_TAB||'Broadcast Log v2',
+        crmId:id, name:c.n||'', custId:c.cid||'', phone:c.ph||'',
+        revenue:String(c.r||0), channel:c.ch||'', trips:String(c.tc||0),
+        assignee:st.assignee||'',
+        sent:st.sent?'YES':'NO',
+        noAccess:(st.nac===true||st.nac==='true')?'YES':'NO',
+        leftGroup:(st.clg===true||st.clg==='true')?'YES':'NO',
+        notes:st.notes||'', dateSent:fmtDate(st.bd||''),
+        markedAt:new Date().toLocaleString('en-GB',{timeZone:'Asia/Bangkok'})
+      });
+      navigator.sendBeacon(url+'?'+params.toString());
+    });
+  }
+});
 </script>
 
 <!-- ===== UNCHECK MODAL ===== -->
