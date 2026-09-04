@@ -868,9 +868,13 @@ function fmtDate(iso){
 }
 
 function toISO(d){
-  // Convert DD/MM/YYYY to YYYY-MM-DD for date input fields
+  // Convert any date format to YYYY-MM-DD for date input fields
   if(!d)return'';
-  if(d.includes('-'))return d; // already ISO
+  // Handle full ISO timestamp e.g. "2026-05-07T18:30:00.000Z" → "2026-05-07"
+  if(d.includes('T'))return d.substring(0,10);
+  // Already YYYY-MM-DD
+  if(d.includes('-'))return d.substring(0,10);
+  // DD/MM/YYYY → YYYY-MM-DD
   const p=d.split('/');
   return p.length===3?p[2]+'-'+p[1]+'-'+p[0]:d;
 }
