@@ -229,6 +229,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
   <select class="fsel" id="fc" onchange="render()">
     <option value="">All channels</option>
     <option>WhatsApp</option><option>Telegram</option><option>Line Official</option><option>Line</option><option>Airbnb</option><option>Wechat</option>
+    <option value="__nochannel__">— No channel / Yet to provide</option>
   </select>
   <select class="fsel" id="fa" onchange="render()">
     <option value="">All assignees</option>
@@ -684,7 +685,10 @@ function render(){
   const f=D.filter(c=>{
     const st=ST[c.id]||{};
     if(q&&!c.n.toLowerCase().includes(q))return false;
-    if(fc&&c.ch!==fc)return false;
+    if(fc==='__nochannel__'){
+      // Show customers with empty or 'Yet to provide' channel
+      if(c.ch&&c.ch!==''&&c.ch!=='Yet to provide')return false;
+    } else if(fc&&c.ch!==fc) return false;
     if(fa&&st.assignee!==fa)return false;
     if(fs==='sent'&&!st.sent)return false;
     if(fs==='unsent'&&st.sent)return false;
