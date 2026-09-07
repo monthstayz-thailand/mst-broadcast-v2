@@ -693,8 +693,12 @@ function render(){
       if(c.ch&&c.ch!==''&&c.ch!=='Yet to provide')return false;
     } else if(fc&&c.ch!==fc) return false;
     if(fa&&st.assignee!==fa)return false;
-    if(fs==='sent'&&!st.sent)return false;
-    if(fs==='unsent'&&st.sent)return false;
+    if(fs==='sent'      && !st.sent)                       return false;
+    if(fs==='unsent'    && st.sent)                        return false;
+    if(fs==='nac'       && !st.nac)                        return false;
+    if(fs==='clg'       && !st.clg)                        return false;
+    // Actionable: ALL THREE checkboxes must be empty
+    if(fs==='actionable' && (st.sent || st.nac || st.clg)) return false;
     return true;
   });
   const list=document.getElementById('list');
