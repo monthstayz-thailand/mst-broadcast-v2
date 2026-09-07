@@ -68,7 +68,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .snote.show{opacity:1}
 
 /* TABLE HEADER */
-.th{display:grid;grid-template-columns:42px 155px 85px 115px 90px 90px 65px 100px 50px 95px 50px 80px 150px;padding:7px 32px;background:linear-gradient(90deg,#0a6e6e,#0e9e9e);border-bottom:none;font-size:9px;font-weight:600;color:#ffffff;letter-spacing:.12em;text-transform:uppercase;position:sticky;top:89px;z-index:50}
+.th{display:grid;grid-template-columns:42px 155px 85px 115px 90px 90px 65px 100px 50px 95px 50px 80px 60px 150px;padding:7px 32px;background:linear-gradient(90deg,#0a6e6e,#0e9e9e);border-bottom:none;font-size:9px;font-weight:600;color:#ffffff;letter-spacing:.12em;text-transform:uppercase;position:sticky;top:89px;z-index:50}
 .th>div{padding:0 5px}
 
 /* ROWS */
@@ -85,7 +85,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .nac-chk{display:inline-block;background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;border-radius:4px;padding:1px 7px;font-size:13px;font-weight:700}
 .nac-unchk{display:inline-block;color:var(--text3);font-size:12px;text-align:center}
 
-.rm{display:grid;grid-template-columns:42px 155px 85px 115px 90px 90px 65px 100px 50px 95px 50px 80px 150px;align-items:center;padding:0 32px;min-height:50px;cursor:pointer}
+.rm{display:grid;grid-template-columns:42px 155px 85px 115px 90px 90px 65px 100px 50px 95px 50px 80px 60px 150px;align-items:center;padding:0 32px;min-height:50px;cursor:pointer}
 .rm>div{padding:0 5px}
 
 .rk{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;border:1.5px solid var(--border2);color:var(--text3);background:var(--bg);flex-shrink:0}
@@ -242,6 +242,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
     <option value="nac">No Access</option>
     <option value="clg">Customer left group</option>
     <option value="actionable">Actionable only (no sent, no access, no left group)</option>
+    <option value="optout">Opted out customers</option>
   </select>
   <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0"><button class="ebtn" onclick="testSheetConnection()" style="background:#fff4ee;border-color:#f5c0a0;color:#c85010" title="Test if Google Sheets connection is working">🔌 Test Sync</button><button id="sync-all-btn" class="ebtn" onclick="syncAllToSheets()" style="background:var(--teal-bg);border-color:var(--teal-border);color:var(--teal)" title="Push all sent records to Google Sheets">☁ Sync All</button><button class="ebtn" onclick="exportCSV()">
     <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
@@ -257,7 +258,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 
 <div class="th">
   <div></div><div>Customer</div><div>Cust ID</div><div>Phone Number</div><div>Revenue</div><div>Channel</div>
-  <div>Trips</div><div>Assignee 🔒</div><div>No Access</div><div>Broadcast Date</div><div>Sent ✓</div><div>Left Group</div><div>Notes</div>
+  <div>Trips</div><div>Assignee 🔒</div><div>No Access</div><div>Broadcast Date</div><div>Sent ✓</div><div>Left Group</div><div>Opt Out</div><div>Notes</div>
 </div>
 
 <div class="list" id="list"></div>
@@ -447,7 +448,7 @@ async function loadCustomersFromAirtable() {
   if (statusEl) statusEl.textContent = '⏳ Loading customers from Airtable...';
   try {
     let all = [], offset = null, page = 0;
-    const fieldNames = ['Full Name','Customer ID','Phone number','Contact Channel','No of trips','Revenue','Customer journey','Arrival Date (from customer journeys)','Checkout Date (from customer journeys)'];
+    const fieldNames = ['Full Name','Customer ID','Phone number','Contact Channel','No of trips','Revenue','Customer journey','Arrival Date (from customer journeys)','Checkout Date (from customer journeys)','Customer opt out'];
     const fieldParams = fieldNames.map(f => 'fields[]=' + encodeURIComponent(f)).join('&');
     do {
       page++;
@@ -480,6 +481,7 @@ async function loadCustomersFromAirtable() {
         tc:  Number(f['No of trips'] || 0),
         r:   rev,
         tj:  Array.isArray(f['Customer journey']) ? f['Customer journey'] : [],
+        oo:  f['Customer opt out'] === true,  // opt out flag
         lar: latestAr,   // latest arrival date across all trips
         ear: earliestAr  // earliest arrival date
       };
@@ -745,6 +747,32 @@ function hna(id,v){
 
 // Pending uncheck request — stores the record ID waiting for admin PIN
 let _pendingUncheck = null;
+
+async function hoo(id, v) {
+  // Update Airtable directly — opt out is permanent across all versions
+  const AT_OPT_OUT = 'fldb7uEgR04S76xl8';
+  try {
+    const url = 'https://api.airtable.com/v0/' + AT_BASE + '/' + AT_CRM_TABLE + '/' + id;
+    const resp = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Authorization': 'Bearer ' + AT_PAT, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { [AT_OPT_OUT]: v } })
+    });
+    const result = await resp.json();
+    if (result.id) {
+      // Update local D record so UI reflects immediately
+      const c = D.find(x => x.id === id);
+      if (c) c.oo = v;
+      render();
+      console.log('✓ Opt out updated in Airtable:', id, v);
+    } else {
+      console.error('Airtable opt out error:', result);
+      alert('Failed to update opt out in Airtable: ' + JSON.stringify(result.error));
+    }
+  } catch(e) {
+    console.error('Opt out error:', e);
+  }
+}
 
 function hclg(id,v){
   sv(id,'clg',v);
