@@ -239,6 +239,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
     <option value="">All status</option>
     <option value="sent">Broadcast sent ✓</option>
     <option value="unsent">Not sent yet</option>
+    <option value="nac">No Access</option>
+    <option value="clg">Customer left group</option>
+    <option value="actionable">Actionable only (no sent, no access, no left group)</option>
   </select>
   <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0"><button class="ebtn" onclick="testSheetConnection()" style="background:#fff4ee;border-color:#f5c0a0;color:#c85010" title="Test if Google Sheets connection is working">🔌 Test Sync</button><button id="sync-all-btn" class="ebtn" onclick="syncAllToSheets()" style="background:var(--teal-bg);border-color:var(--teal-border);color:var(--teal)" title="Push all sent records to Google Sheets">☁ Sync All</button><button class="ebtn" onclick="exportCSV()">
     <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
